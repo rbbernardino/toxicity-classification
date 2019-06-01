@@ -17,15 +17,22 @@ import re, os
 import nltk
 from nltk.corpus import stopwords
 import warnings
+
+
 warnings.simplefilter("ignore", UserWarning)
 print(os.listdir("../input"))
 get_ipython().run_line_magic('matplotlib', 'inline')
 
+#%% [markdown]
+# # 1. Prepare the data
+
 
 #%%
-text_all = pd.read_csv("../input/train.csv")
-test_data = pd.read_csv("../input/test.csv")
+train_df = pd.read_csv("../input/train.csv")
+test_df = pd.read_csv("../input/test.csv")
 
+#%% [markdown]
+# ## String cleaning utilities
 
 #%%
 def clean_str(string):
@@ -65,15 +72,33 @@ def clean_str(string):
     #no_stop_words = " ".join(no_stop_words)
     #string = no_stop_words
 
+    # remove punctuation
+    string = re.sub(r"[…–!—“”\"#$%&’()*+,-./:;<=>?@[\]^_`{|}~]+", "", string)
+
+    # Emojis pattern
+    emoji_pattern = re.compile("["
+                u"\U0001F600-\U0001F64F"  # emoticons
+                u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                u"\U00002702-\U000027B0"u"\U000024C2-\U0001F251"
+                u"\U0001f926-\U0001f937"u'\U00010000-\U0010ffff'u"\u200d"
+                u"\u2640-\u2642"u"\u2600-\u2B55"u"\u23cf"u"\u23e9"u"\u231a"
+                u"\u3030"u"\ufe0f"
+    "]+", flags=re.UNICODE)
+    string = emoji_pattern.sub(u'', string)
+
     return string.strip().lower()
 
+# test the cleaning functions
+test_str = 'as ❤☮☺m☯ 😀 df\n \\ /"12() sdaات کنشی سازf日本語sadf เบอร์10!! ส้มสวย 01แฝดของ08'
+print(clean_str(test_str))
+
+#%% [markdown]
+# ## Printing and Searching Utilities
 
 #%%
-clean_str('asdf\n  sdaf日本語sadf ')
-
-
-#%%
-def print_full(x):
+def display_full(x):
     pd.set_option('display.max_rows', len(x))
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 2000)
@@ -91,42 +116,40 @@ def hasNonASCII(s):
     try:
         s.encode(encoding='utf-8').decode('ascii')
     except UnicodeDecodeError:
-        return False
-    else:
         return True
+    else:
+        return False
 
 def countNonASCII(s):
     if hasNonASCII(s):
         space_split = s.split(' ')
         non_ascii_count = 0
         for item in space_split:
-            if(not hasNonASCII(item)):
+            if(hasNonASCII(item)):
                 non_ascii_count += 1
         return non_ascii_count
     else:
         return 0
 
-
-#%%
-test_data.head(10)
-
 #%% [markdown]
-# ### Check train data language
+# ## Check train data language
 
 #%%
-# print_full(text_all.sample(10).filter(['comment_text']))
-text_all['ASCII'] = text_all['comment_text'].apply(hasNonASCII)
-non_ascii_rows = text_all[~text_all['ASCII']]
+# train_df = train_df.sample(500).copy()
+train_df['comment_text'] = train_df['comment_text'].apply(clean_str)
+train_df['nASCII'] = train_df['comment_text'].apply(hasNonASCII)
+non_ascii_rows = train_df[train_df['nASCII']]
 print("non-ASCII characters:", len(non_ascii_rows), "samples")
 
 
 #%%
-text_all['nASCII_count'] = (non_ascii_rows['comment_text']
-                            .apply(countNonASCII))
+train_df['nASCII_count'] = (train_df['comment_text']
+                                .apply(countNonASCII))
 
 
 #%%
-display(non_ascii_rows
+non_ascii_rows = train_df[train_df['nASCII']] # recreate df to include new column
+display_full(non_ascii_rows
         .sort_values(by=['nASCII_count'], ascending=False)
         .head(10))
 
@@ -134,20 +157,21 @@ display(non_ascii_rows
 #%%
 nascii_tox_q = '(toxic + severe_toxic + obscene + threat + insult + identity_hate)>0'
 tox_nonascii = (non_ascii_rows
-                .sort_values(by=['nASCII_count'], ascending=False)
-                .query(nascii_tox_q))
+                .query(nascii_tox_q)
+                .sort_values(by=['nASCII_count'], ascending=False))
 print("Toxic with non-ascii chars:", len(tox_nonascii))
-print_full(tox_nonascii
+display_full(tox_nonascii
            .filter(['comment_text', 'nASCII_count'])
            .head(100)
            .sample(10)) 
 
 #%% [markdown]
 # ## Some problems found
-# - **17215** samples with non ASCII characters
+# - **8477** samples with non ASCII characters
+# - **275** samples tagged as toxic with non ASCII characters
 
 #%%
-indexes = [
+bad_train_indexes = [
     123420, # [text]
     109029, 46638, # very long / very short
     47648, # emojis
@@ -157,64 +181,50 @@ indexes = [
     72146, # speratated by '•' char
     10359, # translated text with untranslated sentences (starts with "Translated text")
     147587, # almost no english, contains 'Sry for no English'
-    24515, # extremelly offensive with bunch of non-ascii characters (possibly to full AI systems)
+    24515, # extremelly offensive with bunch of non-ascii characters (possibly to fool AI systems)
 ]
 
 #%% [markdown]
-# ### Check Test data language
+# ------------
+# ### Check Test data non ASCII (wraps all above steps)
 
 #%%
-# print_full(test_data.sample(10).filter(['comment_text']))
-test_data['ASCII'] = test_data['comment_text'].apply(hasNonASCII)
-test_non_ascii_rows = test_data[~test_data['ASCII']]
-print("non-ASCII characters:", len(test_non_ascii_rows), "samples")
-
-
-#%%
-test_data['nASCII_count'] = (test_data['comment_text']
+test_df['nASCII'] = test_df['comment_text'].apply(hasNonASCII)
+test_nASCII_df = test_df[test_df['nASCII']].copy()
+print("Test set non-ASCII characters:", len(test_nASCII_df), "samples")
+####
+test_nASCII_df['nASCII_count'] = (test_nASCII_df['comment_text']
                             .apply(countNonASCII))
-
-
-#%%
-test_non_ascii_rows = test_data[test_data['ASCII']]
-print_full(test_non_ascii_rows
+display_full(test_nASCII_df
         .sort_values(by=['nASCII_count'], ascending=False)
-        .head(10))
+        .head(100)
+        .sample(3))
+####
+
+#%%
+bad_test_idexes = [
+    46301, # mostly german
+    98150, # 100% arabic
+    49341, # no content, only repeated string
+    62122, # Tâmil ?
+]
 
 #%% [markdown]
-#  # Texto sem Pré-processamento
+#  # Visualize the words in the comments
 
 #%%
-text_all['comment_text'][0]
-
-#%% [markdown]
-# # Texto limpo
-
-#%%
-text_all['comment_text'] = text_all['comment_text'].apply(lambda x: clean_str(x))
-
-
-#%%
-text_all['comment_text'][0]
-
-
-#%%
-text_all.columns
-labels = text_all.columns[2:]
-
-
-#%%
+train_df.columns
+labels = train_df.columns[2:]
 labels
 
 #%% [markdown]
 # # Nuvem de palavras para cada label
 
 #%%
-
 list_words = []
 for label  in labels:
     text= ""
-    for comment, li in zip(text_all['comment_text'], text_all[label]):
+    for comment, li in zip(train_df['comment_text'], train_df[label]):
             if li == 1:
                 text += " "+comment
     print(label)
@@ -230,7 +240,7 @@ for label  in labels:
 # # Gráfico com as palavras que mais aparecem para cada Label
 
 #%%
-i = 0;
+i = 0
 for label in labels:
 
     words = list(list_words[i].keys())

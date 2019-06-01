@@ -1,0 +1,17 @@
+{
+  "id": "rodrigobb/rbb-first4713960-try",
+  "id_no": 4032126,
+  "title": "RBB - First4713960 Try",
+  "code_file": "rbb-first4713960-try.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [
+    "jigsaw-toxic-comment-classification-challenge"
+  ]
+}
